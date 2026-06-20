@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+"""glm - one-shot free GLM 5.2 (via ZenMux) query, stdlib only.
+
+Offload bulk/cheap work to free GLM 5.2 from any terminal - including from inside
+a Claude Code session running on a paid model, so the expensive model orchestrates
+and GLM does the grunt work for free.
+
+Usage:
+  glm "summarise the tradeoffs of X"          # prompt as argument
+  cat file.py | glm "explain this code"       # stdin appended to the prompt
+  cat notes.md | glm                          # stdin only
+  glm -s "be terse, code only" "regex for ISO dates"
+  glm -m 8000 "long task"                     # raise max answer tokens (default 4096)
+
+Key: $ZENMUX_API_KEY, else ~/.config/zenmux/key (chmod 600). Get a free key at
+https://zenmux.ai - create it on the "GLM 5.2 Free" model. No pip installs needed.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+ENDPOINT = os.environ.get("ZENMUX_URL", "https://zenmux.ai/api/v1/chat/completions")
+MODEL = os.environ.get("ZENMUX_MODEL", "z-ai/glm-5.2-free")
+TIMEOUT = int(os.environ.get("ZENMUX_TIMEOUT", "120"))
+# GLM 5.2 is a reasoning model: reasoning tokens count against max_tokens, so a
+# tight budget yields empty content (finish_reason="length"). Pad the request.
+REASONING_OVERHEAD = int(os.environ.get("ZENMUX_REASONING_OVERHEAD", "1024"))
+_THINK_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL | re.IGNORECASE)
+
+
+def api_key() -> str:
+    key = os.environ.get("ZENMUX_API_KEY", "").strip()
+    if key:
+        return key
+    try:
+        return Path("~/.config/zenmux/key").expanduser().read_text().strip()
+    except OSError:
+        return ""
+
+
+def call(key: str, system: str, prompt: str, max_tokens: int, temperature: float) -> str | None:
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+    body = json.dumps(
+        {
+            "model": MODEL,
+            "messages": messages,
+            "max_tokens": max_tokens + REASONING_OVERHEAD,
+            "temperature": temperature,
+        }
+    ).encode()
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "User-Agent": "glm-free-cli/1.0",
+    }
+    for attempt in range(3):
+        req = urllib.request.Request(ENDPOINT, data=body, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+                data = json.loads(resp.read())
+            raw = (data["choices"][0]["message"].get("content") or "").strip()
+            return _THINK_RE.sub("", raw).strip() or None
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < 2:
+                wait = _retry_after(e.headers)
+                sys.stderr.write(f"glm: rate-limited, retrying in {wait:.0f}s...\n")
+                time.sleep(wait)
+                continue
+            sys.stderr.write(f"glm: HTTP {e.code}: {e.read()[:300].decode(errors='replace')}\n")
+            return None
+        except (urllib.error.URLError, KeyError, IndexError, json.JSONDecodeError) as e:
+            sys.stderr.write(f"glm: {type(e).__name__}: {e}\n")
+            return None
+    return None
+
+
+def _retry_after(headers, default: float = 15.0, cap: float = 65.0) -> float:
+    """Retry-After is delta-seconds OR an HTTP-date (RFC 7231); never raise."""
+    try:
+        return min(float(headers.get("retry-after", "")), cap)
+    except (TypeError, ValueError):
+        return default
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(prog="glm", description="One-shot free GLM 5.2 query.")
+    ap.add_argument("prompt", nargs="*", help="prompt text (stdin is appended if piped)")
+    ap.add_argument("-s", "--system", default="", help="system prompt")
+    ap.add_argument("-m", "--max-tokens", type=int, default=4096, help="max answer tokens")
+    ap.add_argument("-t", "--temperature", type=float, default=0.3, help="sampling temperature")
+    args = ap.parse_args()
+
+    parts = [" ".join(args.prompt).strip()] if args.prompt else []
+    if not sys.stdin.isatty():
+        piped = sys.stdin.read().strip()
+        if piped:
+            parts.append(piped)
+    prompt = "\n\n".join(p for p in parts if p)
+    if not prompt:
+        ap.error("no prompt given (pass text as args or pipe via stdin)")
+
+    key = api_key()
+    if not key:
+        sys.stderr.write("glm: no key. Set $ZENMUX_API_KEY or write it to ~/.config/zenmux/key\n")
+        return 2
+
+    out = call(key, args.system, prompt, args.max_tokens, args.temperature)
+    if not out:
+        return 1
+    sys.stdout.write(out if out.endswith("\n") else out + "\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
