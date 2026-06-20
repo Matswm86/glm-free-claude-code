@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# glm-agent - headless free GLM 5.2 Claude Code agent for whole-task delegation.
+#
+#   glm-agent "summarise what each file in ./src does"     # read-only tools
+#   glm-agent --write "add type hints to utils.py"         # may edit/write files
+#
+# Runs `claude -p` pointed at the free GLM 5.2 endpoint, so the whole agent loop
+# (read/grep/bash, optionally edit/write) runs on GLM, not your Opus subscription.
+# REVIEW the output/diff before trusting it - GLM is weaker than Opus.
+set -euo pipefail
+
+write=0
+if [ "${1:-}" = "--write" ]; then write=1; shift; fi
+[ $# -ge 1 ] || {
+  echo 'usage: glm-agent [--write] "<task>"' >&2
+  exit 1
+}
+
+key="${ZENMUX_API_KEY:-$(cat "$HOME/.config/zenmux/key" 2>/dev/null || true)}"
+[ -n "$key" ] || {
+  echo "glm-agent: no key (\$ZENMUX_API_KEY or ~/.config/zenmux/key)" >&2
+  exit 1
+}
+
+tools="Read Glob Grep Bash"
+mode="default"
+if [ "$write" = 1 ]; then
+  tools="Read Glob Grep Bash Edit Write"
+  mode="acceptEdits"
+fi
+
+ANTHROPIC_BASE_URL="https://zenmux.ai/api/anthropic" \
+  ANTHROPIC_AUTH_TOKEN="$key" \
+  ANTHROPIC_API_KEY="" \
+  ANTHROPIC_DEFAULT_OPUS_MODEL="z-ai/glm-5.2-free" \
+  ANTHROPIC_DEFAULT_SONNET_MODEL="z-ai/glm-5.2-free" \
+  ANTHROPIC_DEFAULT_HAIKU_MODEL="z-ai/glm-5.2-free" \
+  exec claude -p "$*" --allowed-tools $tools --permission-mode "$mode"

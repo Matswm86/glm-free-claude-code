@@ -1,9 +1,10 @@
 # glm-free-claude-code
 
-Use the **free GLM 5.2 API** with [Claude Code](https://claude.com/claude-code) — two small, dependency-free tools:
+Use the **free GLM 5.2 API** with [Claude Code](https://claude.com/claude-code) — three small, dependency-free tools:
 
 1. **`cc-glm`** — launch a whole Claude Code session driven by free GLM 5.2.
 2. **`glm`** — a one-shot CLI so a session running on a *paid* model (e.g. an Opus Max-subscription session) can **offload** cheap/bulk work to free GLM, keeping the expensive model as the orchestrator.
+3. **`glm-agent`** — a *headless* GLM Claude Code agent (`claude -p` pointed at GLM) for handing a whole self-contained, multi-step task to GLM (it reads, greps, runs Bash, optionally edits files) while your paid session reviews the result.
 
 No API key from Anthropic, no paid gateway, no `pip install`. GLM 5.2 is Z.ai's open-weights coding model; ZenMux exposes a free tier of it on an Anthropic- and OpenAI-compatible endpoint.
 
@@ -33,8 +34,8 @@ No API key from Anthropic, no paid gateway, no `pip install`. GLM 5.2 is Z.ai's 
 git clone https://github.com/Matswm86/glm-free-claude-code.git
 cd glm-free-claude-code
 
-# the offload CLI
-install -m 755 glm ~/.local/bin/glm          # ~/.local/bin must be on PATH
+# the offload CLI + headless agent
+install -m 755 glm glm-agent ~/.local/bin/   # ~/.local/bin must be on PATH
 
 # the session launcher
 echo "source $(pwd)/cc-glm.sh" >> ~/.bashrc   # or ~/.zshrc; open a new terminal
@@ -59,6 +60,13 @@ glm -s "code only, no prose" "debounce in TS"   # system prompt
 glm -m 8000 "long refactor plan for ..."        # bigger answer budget
 ```
 The pattern: let the expensive model **plan and review**, and have it shell out to `glm` for the mechanical bulk (boilerplate, summaries, first drafts, long-context grunt work). Cheap half is free.
+
+### C. Hand a whole task to a headless GLM agent
+```bash
+glm-agent "summarise what each file in ./src does"     # read-only tools
+glm-agent --write "add type hints to utils.py"         # may edit/write files
+```
+`glm-agent` runs `claude -p` pointed at GLM, so the entire agent loop (read/grep/Bash, and with `--write`, Edit/Write) runs on free GLM. Default is read-only; `--write` lets it modify files (review the diff — GLM is weaker than a frontier model). Good for delegating a self-contained chunk while your paid session stays free for judgment.
 
 ---
 
