@@ -19,7 +19,7 @@ No API key from Anthropic, no paid gateway, no `pip install`. GLM 5.2 is Z.ai's 
    ```bash
    mkdir -p ~/.config/zenmux && umask 177 && printf '%s' 'YOUR_KEY_HERE' > ~/.config/zenmux/key
    ```
-   (Both tools also accept `export ZENMUX_API_KEY=...` instead of the file.)
+   (All three tools also accept `export ZENMUX_API_KEY=...` instead of the file.)
 
 > If inference returns `403 access_denied` while the models list works, your ZenMux
 > account isn't entitled for the free model yet — finish account activation /
@@ -63,10 +63,10 @@ The pattern: let the expensive model **plan and review**, and have it shell out 
 
 ### C. Hand a whole task to a headless GLM agent
 ```bash
-glm-agent "summarise what each file in ./src does"     # read-only tools
+glm-agent "summarise what each file in ./src does"     # no Edit/Write tools
 glm-agent --write "add type hints to utils.py"         # may edit/write files
 ```
-`glm-agent` runs `claude -p` pointed at GLM, so the entire agent loop (read/grep/Bash, and with `--write`, Edit/Write) runs on free GLM. Default is read-only; `--write` lets it modify files (review the diff — GLM is weaker than a frontier model). Good for delegating a self-contained chunk while your paid session stays free for judgment.
+`glm-agent` runs `claude -p` pointed at GLM, so the entire agent loop (read/grep/Bash, and with `--write`, Edit/Write) runs on free GLM. By default it has no Edit/Write tools, but Bash is not restricted, so a task can still change files through shell commands; `--write` adds Edit/Write (review the diff: GLM is weaker than a frontier model). Good for delegating a self-contained chunk while your paid session stays free for judgment.
 
 ---
 
@@ -76,15 +76,15 @@ Tools like [claude-code-router](https://github.com/musistudio/claude-code-router
 
 They do **not** work with a Claude **Pro/Max subscription**: the subscription only authenticates through Claude Code's own OAuth against the real Anthropic endpoint. The moment any router/proxy sits in front, Claude Code stops using the subscription, and a router needs an Anthropic *API key* (metered, paid) for the Opus leg. So "auto-route Opus + GLM in one terminal" and "free Opus via subscription" are mutually exclusive.
 
-That's the whole reason for the two-tool, two-terminal design here: subscription-Opus stays untouched in its own terminal; free GLM does the rest.
+That's the whole reason for the three-tool, two-terminal design here: subscription-Opus stays untouched in its own terminal; free GLM does the rest.
 
 ---
 
 ## Caveats
 
 - **No vision.** GLM 5.2 is text-only — image/screenshot inputs won't work. Keep those on a multimodal model.
-- **Rate limits.** The free tier has unspecified limits and will `429` under heavy load; both tools back off and retry automatically.
-- **Reasoning model.** GLM 5.2 spends reasoning tokens that count against `max_tokens`; the scripts pad the budget so the answer isn't truncated. Raise it with `-m` / `ZENMUX_REASONING_OVERHEAD` for big outputs.
+- **Rate limits.** The free tier has unspecified limits and will `429` under heavy load; `glm` backs off and retries automatically (up to twice).
+- **Reasoning model.** GLM 5.2 spends reasoning tokens that count against `max_tokens`; `glm` pads the budget so the answer isn't truncated. Raise it with `-m` / `ZENMUX_REASONING_OVERHEAD` for big outputs.
 
 ## License
 
