@@ -1,12 +1,10 @@
 # glm-free-claude-code
 
-Use the **free GLM 5.2 API** with [Claude Code](https://claude.com/claude-code) — three small, dependency-free tools:
+Use the **free GLM 5.2 API** with [Claude Code](https://claude.com/claude-code): three small, dependency-free command-line tools for running a whole session on GLM, or for offloading cheap work and whole tasks to it from a paid session. No API key from Anthropic, no paid gateway, no `pip install`. GLM 5.2 is Z.ai's open-weights coding model; ZenMux exposes a free tier of it on an Anthropic- and OpenAI-compatible endpoint.
 
-1. **`cc-glm`** — launch a whole Claude Code session driven by free GLM 5.2.
-2. **`glm`** — a one-shot CLI so a session running on a *paid* model (e.g. an Opus Max-subscription session) can **offload** cheap/bulk work to free GLM, keeping the expensive model as the orchestrator.
-3. **`glm-agent`** — a *headless* GLM Claude Code agent (`claude -p` pointed at GLM) for handing a whole self-contained, multi-step task to GLM (it reads, greps, runs Bash, optionally edits files) while your paid session reviews the result.
+![Terminal output of glm --help, glm-agent, cc-glm and glm with no key set](docs/screenshot.png)
 
-No API key from Anthropic, no paid gateway, no `pip install`. GLM 5.2 is Z.ai's open-weights coding model; ZenMux exposes a free tier of it on an Anthropic- and OpenAI-compatible endpoint.
+*The `glm` help text, then the `glm-agent` usage line and the "no key" message from `cc-glm` and `glm` before a ZenMux key is set.*
 
 ---
 
@@ -40,6 +38,26 @@ install -m 755 glm glm-agent ~/.local/bin/   # ~/.local/bin must be on PATH
 # the session launcher
 echo "source $(pwd)/cc-glm.sh" >> ~/.bashrc   # or ~/.zshrc; open a new terminal
 ```
+
+---
+
+## What it does
+
+- **`cc-glm`**: launch a whole Claude Code session driven by free GLM 5.2.
+- **`glm`**: a one-shot CLI so a session running on a *paid* model (e.g. an Opus Max-subscription session) can **offload** cheap/bulk work to free GLM, keeping the expensive model as the orchestrator.
+- **`glm-agent`**: a *headless* GLM Claude Code agent (`claude -p` pointed at GLM) for handing a whole self-contained, multi-step task to GLM (it reads, greps, runs Bash, optionally edits files) while your paid session reviews the result.
+
+---
+
+## How it works
+
+`glm` is a single Python 3 file that uses only the standard library: it posts a chat-completions request for the `z-ai/glm-5.2-free` model to ZenMux's OpenAI-compatible endpoint, retries on rate limits and strips any `<think>` block from the answer. `cc-glm` is a bash function and `glm-agent` a bash script; both point Claude Code at ZenMux's Anthropic-compatible endpoint by setting `ANTHROPIC_BASE_URL` and mapping the opus, sonnet and haiku tiers to GLM 5.2 free, then run `claude` (interactive for `cc-glm`, `claude -p` for `glm-agent`). `cc-glm` runs in a subshell so those settings never leak into your normal paid session. `glm-agent` allows Read, Glob, Grep and Bash, and adds Edit and Write (with the accept-edits permission mode) only under `--write`. All three take the key from `ZENMUX_API_KEY` or `~/.config/zenmux/key`.
+
+---
+
+## Status
+
+Three small scripts, no tagged release and no automated test suite yet.
 
 ---
 
